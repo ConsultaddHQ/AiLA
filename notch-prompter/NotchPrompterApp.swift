@@ -1,6 +1,5 @@
-import SwiftUI
 import AppKit
-import HotKey
+import SwiftUI
 
 @main
 struct NotchPrompterApp: App {
@@ -9,12 +8,8 @@ struct NotchPrompterApp: App {
     var body: some Scene {
         Settings {
             SettingsView(viewModel: appDelegate.viewModel)
-                .onAppear(perform: {
-                    NSApp.setActivationPolicy(.regular)
-                })
-                .onDisappear(perform: {
-                    NSApp.setActivationPolicy(.accessory)
-                })
+                .onAppear { NSApp.setActivationPolicy(.regular) }
+                .onDisappear { NSApp.setActivationPolicy(.accessory) }
         }
 
         MenuBarExtra {
@@ -36,59 +31,66 @@ struct NotchPrompterApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let viewModel = PrompterViewModel()
-    private var prompterWindow: PrompterWindow!
+    let viewModel: InterviewViewModel
+    private var notchWindow: NotchWindow!
+
+    override init() {
+        // Register bundled fonts BEFORE constructing the view model so the
+        // first render can use OpenDyslexic if the user already enabled it.
+        FontRegistry.registerBundledFonts()
+        self.viewModel = InterviewViewModel()
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        prompterWindow = PrompterWindow(viewModel: viewModel)
-        prompterWindow.show()
+        notchWindow = NotchWindow(viewModel: viewModel)
+        notchWindow.show()
         NSApp.setActivationPolicy(.accessory)
     }
 }
 
 struct MenuContent: View {
-    @ObservedObject var viewModel: PrompterViewModel
-    
+    @ObservedObject var viewModel: InterviewViewModel
 
-    
     var body: some View {
+        // Note: the global hotkey (configured in Settings → Shortcuts) handles the
+        // toggle action. We don't add a SwiftUI .keyboardShortcut here to avoid
+        // a stale or duplicate binding when the user customizes the hotkey.
         Button {
-            viewModel.isPrompterVisible.toggle()
+            viewModel.toggleListening()
         } label: {
-            Label(viewModel.isPrompterVisible ? "Hide Prompter" : "Show Prompter",
-                  systemImage: viewModel.isPrompterVisible ? "eye.slash" : "eye")
+            Label("\(toggleLabelText) (\(viewModel.hotkeyBinding.displayString))",
+                  systemImage: toggleIcon)
+        }
+
+        Button {
+            viewModel.clear()
+        } label: {
+            Label("Clear", systemImage: "xmark.circle")
+        }
+        .disabled(!hasAnswerOrError)
+
+        Button {
+            viewModel.resetInterview()
+        } label: {
+            Label("New Interview", systemImage: "arrow.counterclockwise")
+        }
+
+        Divider()
+
+        Button {
+            viewModel.isHUDVisible.toggle()
+        } label: {
+            Label(viewModel.isHUDVisible ? "Hide HUD" : "Show HUD",
+                  systemImage: viewModel.isHUDVisible ? "eye.slash" : "eye")
         }
         .keyboardShortcut("h", modifiers: [.command, .option])
-        
-        Divider()
-        
-        Button {
-            if viewModel.isPlaying {
-                viewModel.pause()
-            } else {
-                viewModel.play()
-            }
-        }
-        label: {
-            Label(viewModel.isPlaying ? "Pause" : "Play",
-                  systemImage: viewModel.isPlaying ? "pause.fill" : "play.fill")
-        }
-        .disabled(viewModel.voiceActivation)
-        .keyboardShortcut("p", modifiers: [.command, .option])
 
-        Button {
-            viewModel.reset()
-        } label: {
-            Label("Reset", systemImage: "arrow.counterclockwise")
-        }
-
-        
         Divider()
 
         SettingsLink {
             Label("Settings", systemImage: "gearshape")
         }
-        
         .keyboardShortcut(",", modifiers: [.command])
 
         Divider()
@@ -98,26 +100,13 @@ struct MenuContent: View {
                 NSWorkspace.shared.open(url)
             }
         }
-        
+
         Button("Project page") {
             if let url = URL(string: "https://notchprompter.com") {
                 NSWorkspace.shared.open(url)
             }
         }
-        
-//        Button("Help translate") {
-//            if let url = URL(string: "https://simplelocalize.io/suggestions/?id=f1f11f9305dc44a2872b6a154dea6edc") {
-//                NSWorkspace.shared.open(url)
-//            }
-//        }
-//        #if !APP_STORE_VERSION
-        Button("Sponsor the project") {
-            if let url = URL(string: "https://jpomykala.gumroad.com/l/notchprompter") {
-                NSWorkspace.shared.open(url)
-            }
-        }
-//        #endif
-        
+
         Divider()
 
         Button(role: .destructive) {
@@ -126,5 +115,28 @@ struct MenuContent: View {
             Label("Exit", systemImage: "xmark.circle")
         }
         .keyboardShortcut("q", modifiers: [.command])
+    }
+
+    private var toggleLabelText: String {
+        switch viewModel.state {
+        case .listening: return "Stop Listening"
+        case .transcribing, .thinking: return "Processing…"
+        default: return "Start Listening"
+        }
+    }
+
+    private var toggleIcon: String {
+        switch viewModel.state {
+        case .listening: return "stop.circle"
+        case .transcribing, .thinking: return "hourglass"
+        default: return "mic"
+        }
+    }
+
+    private var hasAnswerOrError: Bool {
+        switch viewModel.state {
+        case .answering, .error: return true
+        default: return false
+        }
     }
 }

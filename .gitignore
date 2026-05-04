@@ -67,3 +67,15 @@ fastlane/test_output
 # Logs
 #
 *.log
+
+# XcodeGen-generated files
+#
+Generated/
+
+# Bundled API keys (team build only — never commit)
+#
+notch-prompter/Secrets.plist
+
+# Team build outputs
+#
+build/

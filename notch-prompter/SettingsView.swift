@@ -1,893 +1,433 @@
+import AppKit
 import SwiftUI
 
-// MARK: - Settings Tabs
-enum SettingsTab: CaseIterable, Identifiable {
-    case script
-    case appearance
-    case layout
-    case behavior
-    case voice
-    case shortcuts
-    
-    var id: Self { self }
-    
-        var label: LocalizedStringResource {
-            switch self {
-            case .script: return "Script"
-            case .appearance: return "Appearance"
-            case .layout: return "Layout"
-            case .behavior: return "Behavior"
-            case .voice: return "Voice"
-            case .shortcuts: return "Shortcuts"
-            }
-        }
-    
-    var icon: String {
-        switch self {
-        case .script: return "doc.text"
-        case .appearance: return "paintpalette"
-        case .layout: return "macwindow"
-        case .behavior: return "gearshape"
-        case .voice: return "microphone"
-        case .shortcuts: return "keyboard"
-        }
-    }
-}
-
 struct SettingsView: View {
-    @ObservedObject var viewModel: PrompterViewModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var selectedTab: SettingsTab = .script
-    @State private var contentVisible = false
-    @State private var isClosing = false
-    @State private var showResetConfirmation = false
-
-    private var appVersion: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
-        return "\(version)"
-    }
+    @ObservedObject var viewModel: InterviewViewModel
 
     var body: some View {
-        ZStack {
-            if contentVisible {
-                settingsContent
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            }
+        TabView {
+            AudioSettingsTab(viewModel: viewModel)
+                .tabItem { Label("Audio", systemImage: "mic") }
+
+            InterviewSetupTab(viewModel: viewModel)
+                .tabItem { Label("Interview", systemImage: "person.2.wave.2") }
+
+            APIKeysSettingsTab()
+                .tabItem { Label("API Keys", systemImage: "key") }
+
+            AppearanceSettingsTab(viewModel: viewModel)
+                .tabItem { Label("Appearance", systemImage: "paintpalette") }
+
+            LayoutSettingsTab(viewModel: viewModel)
+                .tabItem { Label("Layout", systemImage: "rectangle.3.offgrid") }
+
+            ShortcutsSettingsTab(viewModel: viewModel)
+                .tabItem { Label("Shortcuts", systemImage: "command") }
         }
-        .frame(width: 680)
-        .frame(minHeight: 560, maxHeight: 760)
-        .background(.ultraThinMaterial)
-        .alert("Microphone access denied", isPresented: $viewModel.showMicrophoneAlert) {
+        .frame(width: 560, height: 460)
+        .alert("Screen Recording Permission Needed",
+               isPresented: $viewModel.showScreenRecordingAlert) {
+            Button("Open System Settings") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
             Button("OK", role: .cancel) { }
         } message: {
-            Text("Enable microphone access in System Settings → Privacy & Security → Microphone.")
-        }
-        .confirmationDialog("Reset Prompter Position?", isPresented: $showResetConfirmation, titleVisibility: .visible) {
-            Button("Reset", role: .destructive) {
-                viewModel.reset()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This will stop playback and reset the scroll position to the beginning.")
-        }
-        .onAppear {
-            // Animate in with spring animation
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85).delay(0.05)) {
-                contentVisible = true
-            }
+            Text("NotchPrompter listens to system audio (everything playing through your Mac's output) so it can hear the interviewer. macOS gates that under Screen Recording permission. Grant it in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and relaunch the app.")
         }
     }
-    
-    private var settingsContent: some View {
-        HStack(spacing: 0) {
-            // Sidebar
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Settings")
-                // TODO: It would be cool to put here NotchPrompter + version instead of having this in the footer, but I have to also get rid of the window handler with "NotchPrompter Settings" to make it look good.
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                    .textCase(.uppercase)
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 6)
+}
 
-                ForEach(SettingsTab.allCases) { tab in
-                    HStack(spacing: 7) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 12, weight: .medium))
-                            .frame(width: 16)
-                        Text(tab.label)
-                            .font(.system(size: 13, weight: .regular))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(selectedTab == tab ? Color.accentColor.opacity(0.12) : Color.clear)
-                    .foregroundStyle(selectedTab == tab ? Color.accentColor : .primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedTab = tab
-                    }
-                }
+// MARK: - Audio
 
-                Spacer()
-                
-                Text("NotchPrompter \(appVersion)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .opacity(0.6)
-            }
-            .padding(12)
-            .frame(width: 170)
-            .frame(maxHeight: .infinity)
-            .background(Color.primary.opacity(0.04))
+private struct AudioSettingsTab: View {
+    @ObservedObject var viewModel: InterviewViewModel
+    @State private var hasPermission: Bool = AudioCapture.hasScreenRecordingPermission()
 
-            Divider()
-
-            // Content
-            VStack(spacing: 0) {
-                switch selectedTab {
-                case .script:
-                    ScriptTabView(viewModel: viewModel)
-                case .appearance:
-                    AppearanceTabView(viewModel: viewModel)
-                case .behavior:
-                    BehaviorTabView(viewModel: viewModel)
-                case .voice:
-                    VoiceTabView(viewModel: viewModel)
-                case .layout:
-                    LayoutTabView(viewModel: viewModel)
-                case .shortcuts:
-                    KeyboardTabView(viewModel: viewModel)
-                }
-
-                Divider()
-                
-                
-
-                HStack {
-
-                    Button {
-                        if viewModel.isPlaying {
-                            viewModel.pause()
-                        } else {
-                            viewModel.play()
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 10))
-                            Text(viewModel.isPlaying ? "Pause" : "Play")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                    }
-                    .buttonStyle(.automatic)
-                    .disabled(viewModel.voiceActivation)
-                    
-                    Button {
-                        showResetConfirmation = true
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 10))
-                            Text("Reset")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                    }
-                    .buttonStyle(.automatic)
-                    
-                    Button {
-                        viewModel.isPrompterVisible.toggle()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: viewModel.isPrompterVisible ? "eye.slash.fill" : "eye.fill")
-                                .font(.system(size: 10))
-                            Text(viewModel.isPrompterVisible ? "Hide" : "Show")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                    }
-                    .buttonStyle(.automatic)
-                    .help(viewModel.isPrompterVisible ? "Hide the prompter window" : "Show the prompter window")
-
+    var body: some View {
+        Form {
+            Section {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Audio source")
                     Spacer()
-                    
-                    Button("Done") {
-                        closeWithAnimation()
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
+                    Text("System audio (entire Mac mix)")
+                        .foregroundColor(.secondary)
                 }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 16)
+            } header: {
+                Text("Capture")
+            } footer: {
+                Text("The app uses Apple's ScreenCaptureKit to listen to whatever your Mac is playing — typically the interviewer's voice on Zoom, Meet, or Teams. Your microphone is not captured. No virtual audio cable needs to be installed.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity)
+
+            Section {
+                HStack(alignment: .firstTextBaseline) {
+                    if hasPermission {
+                        Label("Granted", systemImage: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                    } else {
+                        Label("Not granted", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                    }
+                    Spacer()
+                    Button("Refresh") { hasPermission = AudioCapture.hasScreenRecordingPermission() }
+                        .controlSize(.small)
+                    Button("Open System Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .controlSize(.small)
+                }
+            } header: {
+                Text("Screen Recording permission")
+            } footer: {
+                Text("Required by macOS for system audio capture. Grant once in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and relaunch the app for the new permission to take effect.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { hasPermission = AudioCapture.hasScreenRecordingPermission() }
+    }
+}
+
+// MARK: - Interview Setup
+
+private struct InterviewSetupTab: View {
+    @ObservedObject var viewModel: InterviewViewModel
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Name (optional)", text: $viewModel.interviewSetup.interviewerName)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Company (e.g. JP Morgan, Eli Lilly, Walmart)", text: $viewModel.interviewSetup.interviewerCompany)
+                    .textFieldStyle(.roundedBorder)
+            } header: {
+                Text("Who's interviewing you?")
+            } footer: {
+                Text("The interviewer's company is the most important field — it sets the domain language used in every answer (finance, pharma, retail, etc.).")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                TextField("Current employer", text: $viewModel.interviewSetup.currentEmployer)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Current project / role (one sentence)", text: $viewModel.interviewSetup.currentProject)
+                    .textFieldStyle(.roundedBorder)
+            } header: {
+                Text("Where do you work now?")
+            }
+
+            Section {
+                TextEditor(text: $viewModel.interviewSetup.pastCompanies)
+                    .font(.system(size: 12))
+                    .frame(minHeight: 90)
+                Text("One company per line. Keep each line short.\nExample:\nAcmeCo — built ML pipeline\nFoobarCorp — led platform team")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("One or two past companies")
+            }
+
+            Section {
+                if viewModel.interviewSetup.isComplete {
+                    Label("Setup complete — ready for the interview.", systemImage: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.caption)
+                } else {
+                    Label("Add at least the interviewer's company and your current employer.", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                        .font(.caption)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - API Keys
+
+private struct APIKeysSettingsTab: View {
+    @State private var anthropicKey: String = Keychain.get(.anthropic) ?? ""
+    @State private var elevenLabsKey: String = Keychain.get(.elevenLabs) ?? ""
+    @State private var anthropicSaved: Bool = false
+    @State private var elevenLabsSaved: Bool = false
+
+    var body: some View {
+        Form {
+            if Credentials.hasBundledKeys {
+                Section {
+                    Label("Keys are bundled with this build.", systemImage: "checkmark.seal.fill")
+                        .foregroundColor(.green)
+                    Text("This is a team build — Anthropic and ElevenLabs keys are baked into the app and used automatically. You can override either one below if you want to use your own; an override saved here takes priority over the bundled key.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Section {
+                SecureField("sk-ant-…", text: $anthropicKey)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Save Anthropic key") { saveAnthropic() }
+                        .disabled(anthropicKey.isEmpty)
+                    if anthropicSaved {
+                        Label("Saved to Keychain", systemImage: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                    }
+                }
+                Link("Get an Anthropic API key →", destination: URL(string: "https://console.anthropic.com/settings/keys")!)
+                    .font(.caption)
+            } header: {
+                Text("Anthropic")
+            } footer: {
+                Text("Used for keyword answer generation (claude-haiku-4-5). Stored in macOS Keychain.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                SecureField("xi-api-key…", text: $elevenLabsKey)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Save ElevenLabs key") { saveElevenLabs() }
+                        .disabled(elevenLabsKey.isEmpty)
+                    if elevenLabsSaved {
+                        Label("Saved to Keychain", systemImage: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                    }
+                }
+                Link("Get an ElevenLabs API key →", destination: URL(string: "https://elevenlabs.io/app/settings/api-keys")!)
+                    .font(.caption)
+            } header: {
+                Text("ElevenLabs")
+            } footer: {
+                Text("Used for transcribing the interviewer's question (Scribe v1). Stored in macOS Keychain.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func saveAnthropic() {
+        do {
+            try Keychain.set(anthropicKey, for: .anthropic)
+            anthropicSaved = true
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                anthropicSaved = false
+            }
+        } catch {
+            anthropicSaved = false
         }
     }
-    
-    private func closeWithAnimation() {
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
-            contentVisible = false
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            dismiss()
+
+    private func saveElevenLabs() {
+        do {
+            try Keychain.set(elevenLabsKey, for: .elevenLabs)
+            elevenLabsSaved = true
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                elevenLabsSaved = false
+            }
+        } catch {
+            elevenLabsSaved = false
         }
     }
 }
 
-// MARK: - Script Tab
-struct ScriptTabView: View {
-    @ObservedObject var viewModel: PrompterViewModel
-    @FocusState private var isTextEditorFocused: Bool
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                // Background
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(nsColor: .textBackgroundColor))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(
-                                isTextEditorFocused ? Color.accentColor : Color(nsColor: .separatorColor),
-                                lineWidth: isTextEditorFocused ? 2 : 1
-                            )
-                    )
-                    .shadow(color: .black.opacity(0.03), radius: 1, x: 0, y: 1)
-                
-                // Placeholder
-                if viewModel.text.isEmpty {
-                    Text("Type your script here...\n\nUse [brackets] for stage directions like [pause], [smile], etc.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 12)
-                        .allowsHitTesting(false)
-                }
-                
-                HighlightingTextEditor(
-                    text: $viewModel.text,
-                    font: .systemFont(ofSize: 15, weight: .regular),
-                    isFocused: $isTextEditorFocused
-                )
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 16)
-            .frame(maxHeight: .infinity)
-        }
-    }
-}
+// MARK: - Appearance
 
+private struct AppearanceSettingsTab: View {
+    @ObservedObject var viewModel: InterviewViewModel
 
-// MARK: - Appearance Tab
-struct AppearanceTabView: View {
-    @ObservedObject var viewModel: PrompterViewModel
-    
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Script")
-                    .font(.system(size: 13, weight: .medium))
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Style")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    
-                    HStack(spacing: 8) {
-                        ForEach([Font.Design.default, .serif, .rounded, .monospaced], id: \.self) { design in
-                            Button {
-                                viewModel.fontDesign = design
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Text(design.icon)
-                                        .font(design.previewFont)
-                                    Text(design.displayLocalizedName)
-                                        .font(.system(size: 11))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(
-                                    viewModel.fontDesign == design 
-                                        ? Color.accentColor.opacity(0.15) 
-                                        : Color(NSColor.controlBackgroundColor)
-                                )
-                                .foregroundStyle(
-                                    viewModel.fontDesign == design 
-                                        ? Color.accentColor 
-                                        : .primary
-                                )
-                                .contentShape(Rectangle())
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .strokeBorder(
-                                            viewModel.fontDesign == design 
-                                                ? Color.accentColor 
-                                                : Color.primary.opacity(0.2),
-                                            lineWidth: 1
-                                        )
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                
-                SettingSlider(
-                    label: "Size",
-                    value: $viewModel.fontSize,
-                    range: 8...80,
-                    step: 1,
-                    unit: "pt"
-                )
-                
-                SettingSlider(
-                    label: "Line spacing",
-                    value: $viewModel.lineHeight,
-                    range: 0...20,
-                    step: 1,
-                    unit: "pt"
-                )
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Alignment")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    
-                    HStack(spacing: 8) {
-                        ForEach(PrompterTextAlignment.allCases, id: \.self) { alignment in
-                            Button {
-                                viewModel.textAlignment = alignment
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Image(systemName: alignment.icon)
-                                        .font(.system(size: 16))
-                                    Text(alignment.displayName)
-                                        .font(.system(size: 11))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(
-                                    viewModel.textAlignment == alignment 
-                                        ? Color.accentColor.opacity(0.15) 
-                                    : Color(NSColor.controlBackgroundColor)
-                                )
-                                .foregroundStyle(
-                                    viewModel.textAlignment == alignment 
-                                        ? Color.accentColor 
-                                        : .primary
-                                )
-                                .contentShape(Rectangle())
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .strokeBorder(
-                                            viewModel.textAlignment == alignment 
-                                                ? Color.accentColor 
-                                                : Color.primary.opacity(0.2),
-                                            lineWidth: 1
-                                        )
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                
-                Divider()
-                
-                Text("Theme")
-                    .font(.system(size: 13, weight: .medium))
-                
-                Picker("", selection: $viewModel.prompterTheme) {
-                    ForEach(PrompterTheme.allCases, id: \.self) { theme in
-                        Text(theme.displayName).tag(theme)
+        Form {
+            Section("Theme") {
+                Picker("Theme", selection: $viewModel.theme) {
+                    ForEach(PrompterTheme.allCases) { t in
+                        Text(t.displayName).tag(t)
                     }
                 }
                 .pickerStyle(.segmented)
-                .labelsHidden()
-                
-                Divider()
-                
-                Text("Fade Effects")
-                    .font(.system(size: 13, weight: .medium))
-                
-                HStack(alignment: .top, spacing: 10) {
-                    Toggle("", isOn: $viewModel.enableTopFade)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                    
-                    VStack(alignment: .leading) {
-                        Text("Top fade")
-                            .font(.system(size: 13))
-                        Text("Fade out content at the top of the prompter")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Section("Typography") {
+                Picker("Font design", selection: $viewModel.fontDesign) {
+                    Text(Font.Design.default.displayLocalizedName).tag(Font.Design.default)
+                    Text(Font.Design.serif.displayLocalizedName).tag(Font.Design.serif)
+                    Text(Font.Design.rounded.displayLocalizedName).tag(Font.Design.rounded)
+                    Text(Font.Design.monospaced.displayLocalizedName).tag(Font.Design.monospaced)
                 }
-                
-                if viewModel.enableTopFade {
-                    SettingSlider(
-                        label: "Height",
-                        value: $viewModel.topFadeHeight,
-                        range: 10...150,
-                        step: 5,
-                        unit: "px"
-                    )
-                }
-                
-                HStack(alignment: .top, spacing: 10) {
-                    Toggle("", isOn: $viewModel.enableBottomFade)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                    
-                    VStack(alignment: .leading) {
-                        Text("Bottom fade")
-                            .font(.system(size: 13))
-                        Text("Fade out content at the bottom of the prompter")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                
-                if viewModel.enableBottomFade {
-                    SettingSlider(
-                        label: "Height",
-                        value: $viewModel.bottomFadeHeight,
-                        range: 10...150,
-                        step: 5,
-                        unit: "px"
-                    )
+                .pickerStyle(.menu)
+
+                HStack {
+                    Text("Font size")
+                    Slider(value: $viewModel.fontSize, in: 12...28, step: 1)
+                    Text("\(Int(viewModel.fontSize))")
+                        .monospacedDigit()
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, alignment: .trailing)
                 }
             }
-            .padding(16)
+
+            Section("Opacity") {
+                HStack {
+                    Slider(value: $viewModel.hudOpacity, in: 0.5...1.0, step: 0.05)
+                    Text("\(Int(viewModel.hudOpacity * 100))%")
+                        .monospacedDigit()
+                        .foregroundColor(.secondary)
+                        .frame(width: 40, alignment: .trailing)
+                }
+            }
+
+            Section {
+                Toggle("Use OpenDyslexic font", isOn: $viewModel.useDyslexiaFriendlyFont)
+                if viewModel.useDyslexiaFriendlyFont {
+                    Text("Bundled OFL-licensed font designed to reduce letter confusion. Overrides the Font design selection above when on.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } header: {
+                Text("Accessibility")
+            }
         }
+        .formStyle(.grouped)
     }
 }
 
-// MARK: - Behavior Tab
-struct BehaviorTabView: View {
-    @ObservedObject var viewModel: PrompterViewModel
-    
+// MARK: - Layout
+
+private struct LayoutSettingsTab: View {
+    @ObservedObject var viewModel: InterviewViewModel
+
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                SettingSlider(
-                    label: "Scroll speed",
-                    value: $viewModel.speed,
-                    range: 1...100,
-                    step: 1,
-                    unit: "pt/s"
+        Form {
+            Section("Position") {
+                Picker("Horizontal alignment", selection: $viewModel.horizontalAlignment) {
+                    ForEach(PrompterHorizontalAlignment.allCases) { a in
+                        Text(a.displayName).tag(a)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                let screens = NSScreen.screens
+                Picker("Display", selection: $viewModel.selectedScreenIndex) {
+                    ForEach(0..<screens.count, id: \.self) { idx in
+                        Text(screenName(screens[idx], idx: idx)).tag(idx)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            Section("HUD size") {
+                HStack {
+                    Text("Width")
+                    Slider(value: $viewModel.hudWidth, in: 280...640, step: 10)
+                    Text("\(Int(viewModel.hudWidth))pt")
+                        .monospacedDigit()
+                        .foregroundColor(.secondary)
+                        .frame(width: 50, alignment: .trailing)
+                }
+                HStack {
+                    Text("Height")
+                    Slider(value: $viewModel.hudHeight, in: 100...260, step: 10)
+                    Text("\(Int(viewModel.hudHeight))pt")
+                        .monospacedDigit()
+                        .foregroundColor(.secondary)
+                        .frame(width: 50, alignment: .trailing)
+                }
+            }
+
+            Section("Privacy") {
+                Toggle("Hide HUD from screen recording", isOn: $viewModel.hideFromScreenRecording)
+                Text("When enabled, the HUD does not appear in screen recordings or shared screens (e.g. Zoom share-screen). Recommended for interviews.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func screenName(_ screen: NSScreen, idx: Int) -> String {
+        let name = screen.localizedName.isEmpty ? "Display \(idx + 1)" : screen.localizedName
+        if screen == NSScreen.main { return "\(name) (Main)" }
+        return name
+    }
+}
+
+// MARK: - Shortcuts
+
+private struct ShortcutsSettingsTab: View {
+    @ObservedObject var viewModel: InterviewViewModel
+
+    var body: some View {
+        Form {
+            Section {
+                ShortcutRow(
+                    label: "Toggle listening",
+                    binding: $viewModel.hotkeyBinding,
+                    defaultBinding: .defaultBinding
                 )
-                
-                Divider()
-                
-                Text("Mouse Interaction")
-                    .font(.system(size: 13, weight: .medium))
-                
-                Toggle(isOn: $viewModel.pauseOnHover) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Pause on hover")
-                            .font(.system(size: 13))
-                        Text("Pause scrolling when mouse enters the prompter window")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.checkbox)
-                
-                Toggle(isOn: $viewModel.showHoverControls) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Show controls on hover")
-                            .font(.system(size: 13))
-                        Text("Display controls when hovering")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.checkbox)
-                
-                Toggle(isOn: $viewModel.showProgressBar) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Show progress bar")
-                            .font(.system(size: 13))
-                        Text("Display a vertical progress indicator on the right side")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.checkbox)
-                
-                Divider()
-                
-                Text("Privacy")
-                    .font(.system(size: 13, weight: .medium))
-                
-                Toggle(isOn: $viewModel.hideFromScreenRecording) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Hide from screen recordings")
-                            .font(.system(size: 13))
-                        Text("Prevent the prompter from appearing in screen shares")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.checkbox)
-            }
-            .padding(16)
-        }
-    }
-}
-
-// MARK: - Voice Tab
-struct VoiceTabView: View {
-    @ObservedObject var viewModel: PrompterViewModel
-    
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 10) {
-                    Toggle("", isOn: $viewModel.voiceActivation)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Voice activation")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Automatically scroll when speaking is detected")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                
-                if viewModel.voiceActivation {
-                    Divider()
-                    
-                    SettingSlider(
-                        label: "Detection threshold",
-                        value: Binding(
-                            get: { Double(viewModel.audioThreshold) },
-                            set: { viewModel.audioThreshold = Float($0) }
-                        ),
-                        range: 0.0...0.1,
-                        step: 0.005,
-                        unit: "%"
-                    )
-                    
-                    Text("Adjust sensitivity for voice detection. Lower values detect quieter speech.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                    
-                    Divider()
-                    
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Audio level monitor")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                        
-                        HStack {
-                            let rms = viewModel.audioMonitor?.rmsLevel ?? 0
-                            let percentage = min(max(rms / 0.1, 0), 1.0) * 100
-                            let color: Color = rms > Float(viewModel.audioThreshold) ? .green : .red
-                            
-                            ProgressView(value: percentage / 100)
-                                .progressViewStyle(
-                                    LinearProgressViewStyle(tint: color)
-                                )
-                                .frame(height: 10)
-                            
-                            Text(percentage / 100, format: .percent.precision(.fractionLength(0)))
-                                .monospacedDigit()
-                                .frame(width: 50, alignment: .trailing)
-                        }
-                    }
-                    
-                    Text("Speak to test your microphone levels")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(16)
-        }
-    }
-}
-
-// MARK: - Layout Tab
-struct LayoutTabView: View {
-    @ObservedObject var viewModel: PrompterViewModel
-    
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Window")
-                    .font(.system(size: 13, weight: .medium))
-                
-                SettingSlider(
-                    label: "Width",
-                    value: Binding(
-                        get: { Double(viewModel.prompterWidth) },
-                        set: { viewModel.prompterWidth = CGFloat($0) }
-                    ),
-                    range: 150...600,
-                    step: 10,
-                    unit: "px"
+                ShortcutRow(
+                    label: "Show / hide HUD",
+                    binding: $viewModel.showHideHotkeyBinding,
+                    defaultBinding: .defaultShowHideBinding
                 )
-                
-                SettingSlider(
-                    label: "Height",
-                    value: Binding(
-                        get: { Double(viewModel.prompterHeight) },
-                        set: { viewModel.prompterHeight = CGFloat($0) }
-                    ),
-                    range: 80...500,
-                    step: 10,
-                    unit: "px"
+                ShortcutRow(
+                    label: "New interview",
+                    binding: $viewModel.newInterviewHotkeyBinding,
+                    defaultBinding: .defaultNewInterviewBinding
                 )
-                
-                Divider()
-                
-                Text("Position")
-                    .font(.system(size: 13, weight: .medium))
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Horizontal alignment")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    
-                    HStack(spacing: 8) {
-                        ForEach(PrompterHorizontalAlignment.allCases, id: \.self) { alignment in
-                            Button {
-                                viewModel.horizontalAlignment = alignment
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Image(systemName: alignment.icon)
-                                        .font(.system(size: 16))
-                                    Text(alignment.displayName)
-                                        .font(.system(size: 11))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(
-                                    viewModel.horizontalAlignment == alignment 
-                                        ? Color.accentColor.opacity(0.15) 
-                                        : Color(NSColor.controlBackgroundColor)
-                                )
-                                .foregroundStyle(
-                                    viewModel.horizontalAlignment == alignment 
-                                        ? Color.accentColor 
-                                        : .primary
-                                )
-                                .contentShape(Rectangle())
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .strokeBorder(
-                                            viewModel.horizontalAlignment == alignment 
-                                                ? Color.accentColor 
-                                                : Color.primary.opacity(0.2),
-                                            lineWidth: 1
-                                        )
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                
-                Text("Choose the horizontal position of the prompter on screen")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-                
-                Divider()
-                
-                Text("Display")
-                    .font(.system(size: 13, weight: .medium))
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Screen")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    
-                    Picker("", selection: $viewModel.selectedScreenIndex) {
-                        ForEach(Array(NSScreen.screens.enumerated()), id: \.offset) { index, screen in
-                            Text("\(screen.localizedName) (\(index + 1))").tag(index)
-                        }
-                    }
-                    .labelsHidden()
-                }
-                
-                Text("Choose which screen the prompter appears on")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Global shortcuts")
+            } footer: {
+                Text("Click any field, then press your desired key combination. Each combo must include at least one of ⌃ ⌥ ⌘ so it doesn't conflict with ordinary typing. Press ESC while recording to cancel.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
-            .padding(16)
+
+            Section {
+                Text("• Toggle listening starts capture; press again to stop and process.\n• Show/hide the HUD without going through the menu bar.\n• New interview wipes the conversation history so the LLM doesn't carry stale context into the next session.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .formStyle(.grouped)
     }
 }
 
-// TODO: add option to change shortcuts
-// MARK: - Keyboard Tab
-struct KeyboardTabView: View {
-    @ObservedObject var viewModel: PrompterViewModel
-    
+private struct ShortcutRow: View {
+    let label: String
+    @Binding var binding: ShortcutBinding
+    let defaultBinding: ShortcutBinding
+
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 10) {
-                    Toggle("", isOn: $viewModel.enableGlobalKeyboardShortcuts)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Enable global keyboard shortcuts")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Control the prompter without having to focus on it")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                
-                if viewModel.enableGlobalKeyboardShortcuts {
-                    Divider()
-                    
-                    Text("Keyboard Shortcuts")
-                        .font(.system(size: 13, weight: .medium))
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        ShortcutRow(
-                            icon: "play.fill",
-                            title: "Play / Pause",
-                            shortcut: "⌃ + ⌥ + p"
-                        )
-                        
-                        ShortcutRow(
-                            icon: "eye.fill",
-                            title: "Show / Hide Prompter",
-                            shortcut: "⌃ + ⌥ + h"
-                        )
-                        
-                        ShortcutRow(
-                            icon: "arrow.left",
-                            title: "Decrease Speed",
-                            shortcut: "⌃ + ⌥ + ←"
-                        )
-                        
-                        ShortcutRow(
-                            icon: "arrow.right",
-                            title: "Increase Speed",
-                            shortcut: "⌃ + ⌥ + →"
-                        )
-                        
-                        ShortcutRow(
-                            icon: "arrow.up",
-                            title: "Scroll Up",
-                            shortcut: "⌃ + ⌥ + ↑"
-                        )
-                        
-                        ShortcutRow(
-                            icon: "arrow.down",
-                            title: "Scroll Down",
-                            shortcut: "⌃ + ⌥ + ↓"
-                        )
-                    }
-                    
-                    Divider()
-                    
-                    Text("Speed Control")
-                        .font(.system(size: 13, weight: .medium))
-                    
-                    SettingSlider(
-                        label: "Speed increment",
-                        value: $viewModel.speedIncrement,
-                        range: 1...10,
-                        step: 1,
-                        unit: "pt/s"
-                    )
-                    
-                    Text("Amount to increase/decrease speed with keyboard shortcuts")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                    
-                    Divider()
-                    
-                    Text("Scroll Control")
-                        .font(.system(size: 13, weight: .medium))
-                    
-                    SettingSlider(
-                        label: "Scroll amount",
-                        value: $viewModel.manualScrollAmount,
-                        range: 10...100,
-                        step: 5,
-                        unit: "px"
-                    )
-                    
-                    Text("Number of pixels to scroll with keyboard shortcuts")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                }
+        HStack(spacing: 8) {
+            Text(label)
+            Spacer()
+            ShortcutRecorder(binding: $binding)
+            Button {
+                binding = defaultBinding
+            } label: {
+                Image(systemName: "arrow.uturn.backward.circle")
             }
-            .padding(16)
-        }
-    }
-}
-
-// MARK: Shortcut row
-struct ShortcutRow: View {
-    let icon: String
-    let title: LocalizedStringKey
-    let shortcut: String
-    
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .frame(width: 20)
-            
-            Text(title)
-                .font(.system(size: 13))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
-            Text(shortcut)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.primary.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-
-// MARK: - Slider Component
-struct SettingSlider: View {
-    let label: LocalizedStringKey
-    @Binding var value: Double
-    let range: ClosedRange<Double>
-    let step: Double
-    let unit: String
-    var isPercentage: Bool = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(label)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if unit == "%" && !isPercentage {
-                    Text(value * 10, format: .percent.precision(.fractionLength(0)))
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                } else if isPercentage {
-                    Text(value, format: .percent.precision(.fractionLength(0)))
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                } else {
-                    Text("\(Int(value)) \(unit)")
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            Slider(value: $value, in: range, step: step)
+            .buttonStyle(.plain)
+            .help("Reset to default (\(defaultBinding.displayString))")
         }
     }
 }
