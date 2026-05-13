@@ -20,7 +20,11 @@ Push-to-talk interview helper that lives in the Mac notch. The interviewer asks 
 - **Display** — Five visual zones: a high-contrast METRIC pill, a large bold LEAD, scannable BEATS, an italic CLOSER, and a RUNWAY line predicting likely follow-ups.
 - **Privacy** — API keys in macOS Keychain (or bundled in the team build); HUD invisible to screen recording (`sharingType = .none`); conversation history stays in memory only.
 
-## Setup (per-user, ~2 minutes)
+## Team install (90 seconds, no API keys needed)
+
+If you're on the internal team using a build distributed via Slack, follow [TEAM_INSTALL.md](TEAM_INSTALL.md) — it has step-by-step instructions for installing the `.app`, granting Screen Recording permission, filling in your interview setup, and running a smoke test. API keys are pre-bundled into the team build; you don't need to obtain or paste any.
+
+## Setup (per-user, ~2 minutes — building from source)
 
 ### 1. API keys
 
