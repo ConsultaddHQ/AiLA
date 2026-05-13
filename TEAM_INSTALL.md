@@ -101,7 +101,7 @@ This is the step everyone forgets. macOS does **not** apply the new Screen Recor
 2. Click the **Audio** tab.
 3. The **Screen Recording permission** section should now say **"Granted"** in **green** with a checkmark.
 
-> 📸 *Screenshot slot 11 — the Settings → Audio tab showing green "Granted" status.*
+![Settings → Audio tab showing green "Granted" status, with "Refresh" and "Open System Settings" buttons. Audio source reads "System audio (entire Mac mix)."](docs/screenshots/settings-audio-granted.png)
 
 If it still says **"Not granted"** after relaunching, see [Troubleshooting](#troubleshooting-screen-recording-permission) below.
 
@@ -118,7 +118,7 @@ If it still says **"Not granted"** after relaunching, see [Troubleshooting](#tro
    - **Past companies** — one per line, format `CompanyName — what you did there`. Two is enough.
 3. When you've filled at least Company + Current Employer, a green ✓ **"Setup complete — ready for the interview."** appears at the bottom.
 
-> 📸 *Screenshot slot 12 — the Interview tab fully filled in with the green "Setup complete" indicator.*
+![Interview tab fully filled in: interviewer Yashwath at SEI Investment, current employer Goldman Sachs as Data Engineer, past companies Volkswagen (Spark, Kafka) and Citi (SQL, Python).](docs/screenshots/settings-interview-filled.png)
 
 ---
 
@@ -131,7 +131,7 @@ If it still says **"Not granted"** after relaunching, see [Troubleshooting](#tro
    - **New interview** — default `⌃⌥N`
 3. Click any shortcut field if you want to record your own custom combo.
 
-> 📸 *Screenshot slot 13 — the Shortcuts tab with the three default shortcuts visible.*
+![Shortcuts tab showing three global shortcuts: Toggle listening (⌃⌥?), Show / hide HUD (⌃⌥H), New interview (⌃⌥N).](docs/screenshots/settings-shortcuts.png)
 
 ---
 
@@ -161,6 +161,26 @@ If you see all of that, you're done. If you see "No speech detected" or "Error",
 ## Step 8 — Hide the HUD between interviews
 
 Press **⌃⌥H** at any time to hide / show the notch HUD. Press **⌃⌥N** to clear the conversation history before starting a new interview (so the AI doesn't carry over context from the previous one).
+
+---
+
+# Optional: tune the look and feel
+
+These are nice-to-have customizations. Defaults are fine for most people; come back here if you want to adjust.
+
+## Appearance
+
+**Settings → Appearance** lets you switch the HUD theme (dark / light), pick a font family, scale the font size, adjust opacity, and turn on **OpenDyslexic** — a bundled font designed to reduce letter confusion. Toggle it on if the default system font is hard to read at a glance.
+
+![Appearance tab: Dark theme selected, Default font design, font size 20pt, opacity 70%, OpenDyslexic toggle off.](docs/screenshots/settings-appearance.png)
+
+## Layout
+
+**Settings → Layout** controls where the HUD appears on screen. Multi-monitor users should pick the **Display** that matches their interview camera setup — typically your built-in laptop screen. Width and height sliders adjust the HUD's bounding box; the defaults (640pt × 260pt) fit most answers comfortably.
+
+> ⚠️ **Privacy toggle.** The **Hide HUD from screen recording** toggle should normally be **ON** for live interviews. When ON, the HUD is invisible to Zoom screen-share, QuickTime recordings, and similar capture tools. Turn it OFF only if you're recording a demo of AiLA itself.
+
+![Layout tab: horizontal alignment Center, Built-in Retina Display selected as the target, HUD width 640pt, height 260pt, "Hide HUD from screen recording" toggle visible.](docs/screenshots/settings-layout.png)
 
 ---
 
