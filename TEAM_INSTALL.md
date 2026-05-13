@@ -45,9 +45,9 @@ This is expected — the app is signed by the team, not Apple's notarization ser
 
 After this, the app launches and you'll never see this warning again on your Mac for this app.
 
-You should see a small **AiLA / notch-prompter icon appear in the macOS menu bar** (top-right corner of the screen, near the clock and battery icon).
+You should see a small **AiLA / notch-prompter icon appear in the macOS menu bar** (top-right corner of the screen, near the clock and battery icon). Click it to reveal the dropdown menu shown below — this is your main control surface for the app.
 
-> 📸 *Screenshot slot 5 — the menu bar showing the AiLA icon.*
+![macOS menu bar dropdown for AiLA, showing the Start Listening item with its hotkey, Clear, New Interview, Hide HUD, Settings, Feedback, Project page, and Exit options. The Exit row at the bottom is highlighted.](docs/screenshots/menu-bar-dropdown.png)
 
 ---
 
@@ -58,10 +58,8 @@ This is the **most important step**. The app needs Screen Recording permission t
 ### 4a. Open Settings
 
 1. Click the AiLA icon in the menu bar.
-2. From the dropdown, choose **Settings…** (or press ⌘,).
+2. From the dropdown (same one shown above in Step 3), choose **Settings…** (or press ⌘,).
 3. The Settings window opens. Click the **Audio** tab.
-
-> 📸 *Screenshot slot 6 — the menu bar dropdown with "Settings…" highlighted.*
 
 ### 4b. Trigger the permission prompt
 
@@ -89,11 +87,9 @@ In **System Settings → Privacy & Security → Screen & System Audio Recording*
 This is the step everyone forgets. macOS does **not** apply the new Screen Recording permission to an already-running app. You **must quit the app fully and reopen it**.
 
 1. Click the AiLA icon in the menu bar.
-2. From the dropdown, choose **Exit** (or press ⌘Q while AiLA is the active app).
+2. From the dropdown, choose **Exit** (or press ⌘Q while AiLA is the active app). The Exit row is highlighted at the bottom of the dropdown (see the screenshot in Step 3 above).
 3. Wait two seconds.
 4. Double-click `notch-prompter` in `/Applications` to open it again. (No right-click needed this time.)
-
-> 📸 *Screenshot slot 10 — the AiLA dropdown menu showing the "Exit" option.*
 
 ### 4e. Verify permission is now granted
 
