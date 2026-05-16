@@ -151,10 +151,11 @@ final class InterviewViewModel: ObservableObject {
     @Published private(set) var state: InterviewState = .idle
     @Published var showScreenRecordingAlert: Bool = false
 
-    /// Verbal bridge phrase the candidate speaks while the main answer is
-    /// being prepared. Updated by the parallel Haiku call. Cleared the moment
-    /// the main answer's first token arrives.
-    @Published var bridge: String?
+    /// The transcribed question, shown big in the HUD the instant STT
+    /// finishes — a realistic, zero-latency placeholder while the answer
+    /// streams in. Cleared the moment the answer's first token arrives.
+    /// nil = hidden.
+    @Published var pendingQuestion: String?
 
     // MARK: - Conversation
 
@@ -182,8 +183,8 @@ final class InterviewViewModel: ObservableObject {
     @Published var selectedScreenIndex: Int = 0
     @Published var horizontalAlignment: PrompterHorizontalAlignment = .center
     @Published var hideFromScreenRecording: Bool = true
-    @Published var hudWidth: CGFloat = 360
-    @Published var hudHeight: CGFloat = 200
+    @Published var hudWidth: CGFloat = 560
+    @Published var hudHeight: CGFloat = 320
 
     // MARK: - Appearance
 
@@ -249,7 +250,7 @@ final class InterviewViewModel: ObservableObject {
     func clear() {
         streamTask?.cancel()
         streamTask = nil
-        bridge = nil
+        pendingQuestion = nil
         state = .idle
     }
 
@@ -258,7 +259,7 @@ final class InterviewViewModel: ObservableObject {
     func resetInterview() {
         streamTask?.cancel()
         streamTask = nil
-        bridge = nil
+        pendingQuestion = nil
         conversation.reset()
         state = .idle
     }
@@ -307,10 +308,6 @@ final class InterviewViewModel: ObservableObject {
                 return
             }
             await MainActor.run {
-                // Show the static fallback bridge from the moment STT begins —
-                // it covers the awkward gap before Haiku returns its
-                // question-aware bridge.
-                self.bridge = Self.staticBridges.randomElement()
                 self.state = .transcribing
             }
             await self.process(audioURL: url, setup: setupSnapshot)
@@ -322,39 +319,20 @@ final class InterviewViewModel: ObservableObject {
         do {
             transcript = try await stt.transcribe(wavURL: audioURL)
         } catch {
-            await MainActor.run { self.bridge = nil }
+            await MainActor.run { self.pendingQuestion = nil }
             await setState(.error(message: error.localizedDescription))
             return
         }
 
         await MainActor.run {
             self.conversation.appendInterviewer(transcript)
+            // Show the transcribed question instantly as the placeholder —
+            // realistic, zero-latency, and confirms transcription accuracy.
+            self.pendingQuestion = transcript
             self.state = .thinking
         }
 
         let history = await MainActor.run { self.conversation.snapshot() }
-
-        // Fire the question-aware Haiku bridge in parallel. It usually returns
-        // before Sonnet's first token; when it does, it replaces the static
-        // fallback already on screen. If it fails or times out, the static
-        // fallback stays — never blocks the main answer.
-        let bridgeTask = Task { [weak self] in
-            guard let self = self else { return }
-            do {
-                let phrase = try await self.llm.generateBridge(history: history, setup: setup)
-                let cleaned = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
-                if cleaned.isEmpty { return }
-                await MainActor.run {
-                    // Only update if we're still in the bridge window.
-                    if case .thinking = self.state { self.bridge = cleaned }
-                    if case .transcribing = self.state { self.bridge = cleaned }
-                }
-            } catch {
-                #if DEBUG
-                print("[Bridge] Haiku call failed: \(error)")
-                #endif
-            }
-        }
 
         var accumulated = ""
 
@@ -364,8 +342,9 @@ final class InterviewViewModel: ObservableObject {
                 switch event {
                 case .delta(let text):
                     if accumulated.isEmpty {
-                        // First token of the main answer — bridge fades.
-                        await MainActor.run { self.bridge = nil }
+                        // First token of the answer — the question placeholder
+                        // is replaced by the streaming answer.
+                        await MainActor.run { self.pendingQuestion = nil }
                     }
                     accumulated += text
                     let answer = InterviewAnswer(question: transcript, rawText: accumulated, isComplete: false)
@@ -380,27 +359,15 @@ final class InterviewViewModel: ObservableObject {
                     await MainActor.run {
                         self.conversation.appendCandidate(finalText)
                         self.state = .answering(answer)
-                        self.bridge = nil
+                        self.pendingQuestion = nil
                     }
                 }
             }
         } catch {
-            await MainActor.run { self.bridge = nil }
+            await MainActor.run { self.pendingQuestion = nil }
             await setState(.error(message: error.localizedDescription))
         }
-
-        bridgeTask.cancel()
     }
-
-    /// Small library of formal placeholder bridges shown immediately while the
-    /// Haiku question-aware bridge is being generated. Pick is random per turn.
-    private static let staticBridges: [String] = [
-        "Let me think this through for a moment.",
-        "Stepping into this carefully.",
-        "Right, on this specifically — let me frame it properly.",
-        "There's a particular angle worth walking through here.",
-        "Let me make sure I structure the answer well."
-    ]
 
     @MainActor
     private func setState(_ newState: InterviewState) {
