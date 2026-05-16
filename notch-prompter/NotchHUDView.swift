@@ -13,12 +13,10 @@ struct NotchHUDView: View {
         }
         .frame(width: vm.hudWidth, height: vm.hudHeight)
         .opacity(vm.hudOpacity)
-        .onTapGesture {
-            // Click only dismisses error states. Answers persist until the next
-            // hotkey press starts a new turn — the candidate keeps the answer
-            // visible while reading it aloud.
-            if case .error = vm.state { vm.clear() }
-        }
+        // Note: the window has `ignoresMouseEvents = true` so taps inside the
+        // HUD pass through to whatever app is underneath. To dismiss an error
+        // or clear an answer, use the menu bar (Clear / New Interview) or
+        // your customizable global shortcuts.
     }
 
     private var notchTopInset: CGFloat {
@@ -38,13 +36,14 @@ struct NotchHUDView: View {
         case .listening:
             ListeningIndicator(textColor: foregroundColor)
         case .transcribing, .thinking:
-            BridgeView(
-                phrase: vm.bridge,
+            PendingQuestionView(
+                question: vm.pendingQuestion,
                 fontSize: vm.fontSize,
                 fontDesign: vm.fontDesign,
                 useDyslexicFriendly: vm.useDyslexiaFriendlyFont,
                 foregroundColor: foregroundColor,
-                mutedColor: mutedColor
+                mutedColor: mutedColor,
+                accentColor: accentColor
             )
         case .answering(let answer):
             AnswerView(
@@ -114,51 +113,68 @@ private struct ListeningIndicator: View {
     }
 }
 
-/// During transcribing + thinking, the candidate sees a single short bridge
-/// phrase they can speak aloud. Initially a static fallback; swapped in-place
-/// by the question-aware Haiku result the moment it returns.
-private struct BridgeView: View {
-    let phrase: String?
+/// The instant STT finishes, the candidate sees the transcribed question
+/// rendered big and readable while the answer streams in (~1s). It's a
+/// zero-latency, fully-realistic placeholder: it's literally what was asked,
+/// it confirms the transcription was accurate, and it gives the candidate
+/// something concrete to re-read for the brief moment before the LEAD lands.
+///
+/// `question == nil` → "Listening…" (STT still running, no transcript yet).
+/// `question == "..."` → the transcribed question.
+private struct PendingQuestionView: View {
+    let question: String?
     let fontSize: Double
     let fontDesign: Font.Design
     let useDyslexicFriendly: Bool
     let foregroundColor: Color
     let mutedColor: Color
+    let accentColor: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let phrase = phrase, !phrase.isEmpty {
-                Text(phrase)
-                    .font(HUDFont.font(
-                        size: bridgeFontSize,
-                        weight: .semibold,
-                        italic: false,
-                        useDyslexicFriendly: useDyslexicFriendly,
-                        systemDesign: fontDesign
-                    ))
-                    .foregroundColor(foregroundColor)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineSpacing(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .id(phrase)
-                    .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.25), value: phrase)
-            }
-
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 ProgressView()
                     .controlSize(.mini)
                     .progressViewStyle(.circular)
-                Text("preparing answer")
-                    .font(.system(size: 10, weight: .regular, design: fontDesign))
-                    .foregroundColor(mutedColor.opacity(0.7))
+                Text(question == nil ? "transcribing" : "they asked")
+                    .font(.system(size: 11, weight: .semibold, design: fontDesign))
+                    .foregroundColor(accentColor.opacity(0.85))
+                    .textCase(.uppercase)
+            }
+
+            if let question = question, !question.isEmpty {
+                ScrollView(.vertical, showsIndicators: false) {
+                    Text(question)
+                        .font(HUDFont.font(
+                            size: questionFontSize,
+                            weight: .medium,
+                            italic: false,
+                            useDyslexicFriendly: useDyslexicFriendly,
+                            systemDesign: fontDesign
+                        ))
+                        .foregroundColor(foregroundColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineSpacing(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollDisabled(false)
+            } else {
+                Text("Listening to the question…")
+                    .font(HUDFont.font(
+                        size: questionFontSize,
+                        weight: .regular,
+                        italic: true,
+                        useDyslexicFriendly: useDyslexicFriendly,
+                        systemDesign: fontDesign
+                    ))
+                    .foregroundColor(mutedColor.opacity(0.75))
             }
 
             Spacer(minLength: 0)
         }
     }
 
-    private var bridgeFontSize: CGFloat { max(CGFloat(fontSize) - 2, 14) }
+    private var questionFontSize: CGFloat { max(CGFloat(fontSize) - 2, 13) }
 }
 
 /// Renders an Interview-Ace answer as a performance script:

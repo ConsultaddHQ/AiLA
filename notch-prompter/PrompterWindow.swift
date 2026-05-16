@@ -38,7 +38,11 @@ final class NotchWindow {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isMovableByWindowBackground = false
         window.contentView = hosting
-        window.ignoresMouseEvents = false
+        // HUD is a pure overlay — let all clicks pass through to whatever
+        // app is underneath (Zoom, browser, IDE). The user controls AiLA via
+        // the global hotkeys (⌃⌥? / ⌃⌥H / ⌃⌥N) and the menu bar; nothing
+        // about the HUD itself needs to be clickable.
+        window.ignoresMouseEvents = true
 
         viewModel.$hudWidth
             .combineLatest(viewModel.$hudHeight)

@@ -25,6 +25,12 @@ struct SettingsView: View {
                 .tabItem { Label("Shortcuts", systemImage: "command") }
         }
         .frame(width: 560, height: 460)
+        .overlay(alignment: .bottom) {
+            Text(AppVersion.display)
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .padding(.bottom, 6)
+        }
         .alert("Screen Recording Permission Needed",
                isPresented: $viewModel.showScreenRecordingAlert) {
             Button("Open System Settings") {
@@ -333,23 +339,30 @@ private struct LayoutSettingsTab: View {
                 .pickerStyle(.menu)
             }
 
-            Section("HUD size") {
+            Section {
                 HStack {
                     Text("Width")
-                    Slider(value: $viewModel.hudWidth, in: 280...640, step: 10)
+                    Slider(value: $viewModel.hudWidth, in: 280...1100, step: 10)
                     Text("\(Int(viewModel.hudWidth))pt")
                         .monospacedDigit()
                         .foregroundColor(.secondary)
-                        .frame(width: 50, alignment: .trailing)
+                        .frame(width: 56, alignment: .trailing)
                 }
                 HStack {
                     Text("Height")
-                    Slider(value: $viewModel.hudHeight, in: 100...260, step: 10)
+                    Slider(value: $viewModel.hudHeight, in: 120...600, step: 10)
                     Text("\(Int(viewModel.hudHeight))pt")
                         .monospacedDigit()
                         .foregroundColor(.secondary)
-                        .frame(width: 50, alignment: .trailing)
+                        .frame(width: 56, alignment: .trailing)
                 }
+            } header: {
+                Text("HUD size")
+            } footer: {
+                Text("Set the HUD large enough for the longest answer you expect. Width 560pt × Height 320pt is a good starting point; longer prose-style answers may need up to 900×500.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Privacy") {

@@ -53,6 +53,14 @@ struct MenuContent: View {
     @ObservedObject var viewModel: InterviewViewModel
 
     var body: some View {
+        // Build identity — always visible so you instantly know which build
+        // is running. If this doesn't match the change you just made, you're
+        // on a stale binary (run scripts/clean-rebuild.sh).
+        Text(AppVersion.display)
+            .font(.system(size: 11))
+
+        Divider()
+
         // Note: the global hotkey (configured in Settings → Shortcuts) handles the
         // toggle action. We don't add a SwiftUI .keyboardShortcut here to avoid
         // a stale or duplicate binding when the user customizes the hotkey.

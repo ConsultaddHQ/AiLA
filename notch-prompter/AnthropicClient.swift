@@ -30,84 +30,13 @@ enum AnswerStreamEvent {
 struct AnthropicClient {
     private let session: URLSession
     private let model: String
-    private let bridgeModel: String
 
     init(
         session: URLSession = .shared,
-        model: String = "claude-sonnet-4-6",
-        bridgeModel: String = "claude-haiku-4-5"
+        model: String = "claude-sonnet-4-6"
     ) {
         self.session = session
         self.model = model
-        self.bridgeModel = bridgeModel
-    }
-
-    /// Fast non-streaming bridge call. Generates a single short verbal phrase
-    /// the candidate speaks while the main answer is being prepared. Runs in
-    /// parallel with `streamAnswer`.
-    func generateBridge(history: [ConversationTurn], setup: InterviewSetup) async throws -> String {
-        guard let key = Credentials.get(.anthropic), !key.isEmpty else {
-            throw AnthropicError.missingAPIKey
-        }
-
-        var systemBlocks: [RequestBody.SystemBlock] = [
-            .init(text: BridgePrompt.text)
-        ]
-        let setupBlock = setup.renderedContextBlock
-        if !setupBlock.isEmpty {
-            systemBlocks.append(.init(text: setupBlock))
-        }
-
-        let messages = history.map { turn -> RequestBody.Message in
-            RequestBody.Message(
-                role: turn.role == .interviewer ? "user" : "assistant",
-                content: turn.text
-            )
-        }
-        let safeMessages: [RequestBody.Message] = {
-            if let first = messages.first, first.role == "user" { return messages }
-            return [.init(role: "user", content: "(start of interview)")] + messages
-        }()
-
-        let body = RequestBody(
-            model: bridgeModel,
-            max_tokens: 80,
-            stream: false,
-            system: systemBlocks,
-            messages: safeMessages
-        )
-
-        var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue(key, forHTTPHeaderField: "x-api-key")
-        req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        req.timeoutInterval = 8
-        req.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await session.data(for: req)
-        } catch {
-            throw AnthropicError.transport(error)
-        }
-        guard let http = response as? HTTPURLResponse else {
-            throw AnthropicError.http(status: -1, body: "")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            let bodyStr = String(data: data, encoding: .utf8) ?? ""
-            throw AnthropicError.http(status: http.statusCode, body: bodyStr)
-        }
-
-        do {
-            let decoded = try JSONDecoder().decode(BridgeResponseBody.self, from: data)
-            let raw = decoded.content.compactMap(\.text).joined(separator: " ")
-            return raw
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-        } catch {
-            throw AnthropicError.decoding(error)
-        }
     }
 
     /// Streams an interview answer using the Interview Ace prompt + the user's
@@ -288,12 +217,3 @@ private struct StreamEvent: Decodable {
     }
 }
 
-// MARK: - Bridge response
-
-private struct BridgeResponseBody: Decodable {
-    let content: [ContentBlock]
-    struct ContentBlock: Decodable {
-        let type: String
-        let text: String?
-    }
-}
